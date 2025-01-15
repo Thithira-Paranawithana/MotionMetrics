@@ -19,7 +19,7 @@ using namespace std;
 using namespace cv;
 
 // Add these new global variables after existing globals
-atomic<bool> syncRequested{false};
+atomic<bool> syncRequested{ false };
 const int64_t SYNC_THRESHOLD_NS = 1000000; // 1ms threshold for sync
 mutex syncMutex;
 condition_variable syncCV;
@@ -116,7 +116,7 @@ mutex displayMutex;
 int ConfigureTrigger(INodeMap& nodeMap)
 {
     int result = 0;
-    cout << endl << "* CONFIGURING TRIGGER AND TIMESTAMP *" << endl;
+    cout << endl << "*** CONFIGURING TRIGGER AND TIMESTAMP ***" << endl;
 
     try
     {
