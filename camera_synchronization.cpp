@@ -9,12 +9,20 @@
 #include <queue>
 #include <atomic>
 #include <chrono>
+#include <algorithm>
+#include <numeric>
 
 using namespace Spinnaker;
 using namespace Spinnaker::GenApi;
 using namespace Spinnaker::GenICam;
 using namespace std;
 using namespace cv;
+
+// Add these new global variables after existing globals
+atomic<bool> syncRequested{false};
+const int64_t SYNC_THRESHOLD_NS = 1000000; // 1ms threshold for sync
+mutex syncMutex;
+condition_variable syncCV;
 
 // Structure to hold frame data and timestamp
 struct FrameData {
