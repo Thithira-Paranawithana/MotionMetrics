@@ -372,7 +372,7 @@ int RunMultipleCameras(CameraList& camList)
     return result;
 }
 
-int main(int /argc/, char** /argv/)
+int main(int /*argc*/, char** /*argv*/)
 {
     int result = 0;
 
