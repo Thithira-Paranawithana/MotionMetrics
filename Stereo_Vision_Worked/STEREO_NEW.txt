@@ -1,0 +1,439 @@
+% Load stereoParams.mat
+load('stereoParams.mat');
+
+% Extract calibrationSession
+if exist('calibrationSession', 'var')
+    stereoParams = calibrationSession.CameraParameters;
+
+    % Display key information
+    fprintf('=== Stereo Calibration Summary ===\n');
+    fprintf('Mean Reprojection Error: %.4f pixels\n', stereoParams.MeanReprojectionError);
+    fprintf('Number of Calibration Patterns: %d\n', stereoParams.NumPatterns);
+    fprintf('Baseline Distance: %.1f mm\n', norm(stereoParams.PoseCamera2.Translation));
+    fprintf('Camera 1 Error: %.4f pixels\n', stereoParams.CameraParameters1.MeanReprojectionError);
+    fprintf('Camera 2 Error: %.4f pixels\n', stereoParams.CameraParameters2.MeanReprojectionError);
+    fprintf('Vertical Offset: %.1f mm\n', abs(stereoParams.PoseCamera2.Translation(2)));
+
+else
+    error('calibrationSession variable not found in stereoParams.mat');
+end
+
+/////////////////////////////////////////
+
+%run keypoint extraction python script
+	python extract_stereo_keypoints.py
+
+%now keypoints from mediapipe are saved to jsons.
+
+////////////////////////////////////////////////////////
+
+%% Step 3: Load Stereo Keypoints 
+
+keypointFiles = {'keypoints_vid1.json', 'keypoints_vid2.json'};
+numCameras = 2;
+
+fprintf('=== Loading Stereo Keypoints (Numeric Format) ===\n');
+
+humanKeypoints = [];
+
+for camIdx = 1:numCameras
+    jsonFile = keypointFiles{camIdx};
+
+    if isfile(jsonFile)
+        fprintf('Loading %s...', jsonFile);
+
+        % Read and parse JSON
+        fid = fopen(jsonFile, 'r');
+        raw = fread(fid, inf);
+        str = char(raw');
+        fclose(fid);
+
+        data = jsondecode(str);
+
+        % Handle numeric array format (frames x keypoints x 3)
+        if isnumeric(data)
+            [numFrames, numKeypoints, ~] = size(data);
+
+            if isempty(humanKeypoints)
+                humanKeypoints = nan(numKeypoints, 2, numFrames, numCameras);
+                fprintf('\n  Initialized: [%d keypoints, 2 coords, %d frames, %d cameras]\n', ...
+                       numKeypoints, numFrames, numCameras);
+            end
+
+            validCount = 0;
+            for frameIdx = 1:numFrames
+                for kpIdx = 1:numKeypoints
+                    x = data(frameIdx, kpIdx, 1);
+                    y = data(frameIdx, kpIdx, 2);
+                    visibility = data(frameIdx, kpIdx, 3);
+
+                    % Check for valid keypoint (not NaN and good visibility)
+                    if visibility > 0.3 && ~isnan(x) && ~isnan(y) && x > 0 && y > 0
+                        humanKeypoints(kpIdx, 1, frameIdx, camIdx) = x;
+                        humanKeypoints(kpIdx, 2, frameIdx, camIdx) = y;
+                        validCount = validCount + 1;
+                    end
+                end
+            end
+
+            fprintf(' ✓ %d valid keypoints loaded\n', validCount);
+
+        else
+            fprintf(' ✗ Expected numeric array, got %s\n', class(data));
+        end
+    else
+        fprintf('✗ File not found: %s\n', jsonFile);
+    end
+end
+
+% Report statistics
+if ~isempty(humanKeypoints)
+    totalValid = sum(~isnan(humanKeypoints(:)));
+    totalPossible = numel(humanKeypoints);
+    successRate = (totalValid / totalPossible) * 100;
+
+    fprintf('\n=== Keypoint Loading Results ===\n');
+    fprintf('Success rate: %.1f%% (%d/%d points)\n', successRate, totalValid, totalPossible);
+
+    % Count frames with data
+    framesWithData = 0;
+    for frameIdx = 1:size(humanKeypoints, 3)
+        if sum(~isnan(humanKeypoints(:, 1, frameIdx, :)), 'all') > 0
+            framesWithData = framesWithData + 1;
+        end
+    end
+
+    fprintf('Frames with keypoints: %d/%d (%.1f%%)\n', ...
+           framesWithData, size(humanKeypoints, 3), 100*framesWithData/size(humanKeypoints, 3));
+
+    % check a few sample points
+    sampleFrame = round(size(humanKeypoints, 3) / 2); % Middle frame
+    validInSample = sum(~isnan(humanKeypoints(:, 1, sampleFrame, :)), 'all');
+    fprintf('Sample frame %d: %d valid keypoints\n', sampleFrame, validInSample);
+
+    fprintf('\n=== Step 3 Complete ===\n');
+else
+    error('No keypoints loaded successfully');
+end
+
+////////////////////////////////////////////////////////
+
+%% Step 4: Improved Stereo Keypoint Undistortion
+
+fprintf('=== Step 4: Improved Stereo Keypoint Undistortion ===\n');
+
+% IMPROVED: Check actual image size from stereo parameters
+imgSize = stereoParams.CameraParameters1.ImageSize; % [height, width]
+fprintf('Using image size: %dx%d pixels\n', imgSize(2), imgSize(1));
+
+% Get camera parameters
+cameraParams1 = stereoParams.CameraParameters1;
+cameraParams2 = stereoParams.CameraParameters2;
+cameraParams = {cameraParams1, cameraParams2};
+
+% Initialize undistorted keypoints
+undistortedKeypoints = nan(size(humanKeypoints));
+[numKeypoints, ~, numFrames, numCameras] = size(humanKeypoints);
+
+for camIdx = 1:numCameras
+    fprintf('Undistorting Camera %d keypoints...', camIdx);
+    
+    validCount = 0;
+    totalCount = 0;
+    
+    for frameIdx = 1:numFrames
+        currentPoints = squeeze(humanKeypoints(:, :, frameIdx, camIdx));
+        validPoints = ~isnan(currentPoints(:,1)) & ~isnan(currentPoints(:,2));
+        
+        if any(validPoints)
+            totalCount = totalCount + sum(validPoints);
+            
+            % IMPROVED: More generous boundary checking (was 5, now 50 pixels)
+            margin = 50;
+            withinBounds = currentPoints(validPoints, 1) > margin & ...
+                          currentPoints(validPoints, 1) < (imgSize(2) - margin) & ...
+                          currentPoints(validPoints, 2) > margin & ...
+                          currentPoints(validPoints, 2) < (imgSize(1) - margin);
+            
+            validPointsFiltered = validPoints;
+            validPointsFiltered(validPoints) = withinBounds;
+            
+            if any(validPointsFiltered)
+                try
+                    % Apply undistortion
+                    undistortedPoints = undistortPoints(currentPoints(validPointsFiltered, :), ...
+                                                      cameraParams{camIdx});
+                    
+                    % IMPROVED: Additional validation after undistortion
+                    validUndistorted = all(isfinite(undistortedPoints), 2) & ...
+                                     undistortedPoints(:, 1) > 0 & ...
+                                     undistortedPoints(:, 1) < imgSize(2) & ...
+                                     undistortedPoints(:, 2) > 0 & ...
+                                     undistortedPoints(:, 2) < imgSize(1);
+                    
+                    if any(validUndistorted)
+                        finalValidIndices = find(validPointsFiltered);
+                        finalValidIndices = finalValidIndices(validUndistorted);
+                        undistortedKeypoints(finalValidIndices, :, frameIdx, camIdx) = ...
+                            undistortedPoints(validUndistorted, :);
+                        validCount = validCount + sum(validUndistorted);
+                    end
+                    
+                catch
+                    % Skip problematic batch
+                    continue;
+                end
+            end
+        end
+    end
+    
+    if totalCount > 0
+        retentionRate = (validCount / totalCount) * 100;
+        fprintf(' %d/%d points retained (%.1f%%)\n', validCount, totalCount, retentionRate);
+    end
+end
+
+% Report results
+originalValid = sum(~isnan(humanKeypoints(:)));
+undistortedValid = sum(~isnan(undistortedKeypoints(:)));
+
+fprintf('\n=== Improved Undistortion Results ===\n');
+fprintf('Original valid points: %d\n', originalValid);
+fprintf('Undistorted valid points: %d\n', undistortedValid);
+fprintf('Retention rate: %.1f%%\n', 100*undistortedValid/originalValid);
+
+if undistortedValid > 0.6 * originalValid
+    fprintf('✓ Good undistortion retention (>60%%)\n');
+    fprintf('\n=== Step 4 Complete ===\n');
+else
+    fprintf('⚠ Still low retention - but proceeding with available points\n');
+    fprintf('\n=== Step 4 Complete ===\n');
+end
+
+/////////////////////////////////////////////////
+
+%% Step 5: Stereo Triangulation
+
+fprintf('=== Step 5: Stereo Triangulation ===\n');
+
+[numKeypoints, ~, numFrames, ~] = size(undistortedKeypoints);
+xyzPoints = nan(numKeypoints, 3, numFrames);
+
+% Statistics tracking
+totalAttempts = 0;
+successfulTriangulations = 0;
+
+for frameIdx = 1:numFrames
+    if mod(frameIdx, 100) == 0
+        fprintf('Processing frame %d/%d (Success: %d/%d)\n', ...
+               frameIdx, numFrames, successfulTriangulations, totalAttempts);
+    end
+    
+    % Get keypoints for current frame
+    pts1 = squeeze(undistortedKeypoints(:, :, frameIdx, 1)); % Camera 1
+    pts2 = squeeze(undistortedKeypoints(:, :, frameIdx, 2)); % Camera 2
+    
+    for pointIdx = 1:numKeypoints
+        % Check if both cameras see the keypoint
+        validCam1 = ~isnan(pts1(pointIdx, 1)) && ~isnan(pts1(pointIdx, 2));
+        validCam2 = ~isnan(pts2(pointIdx, 1)) && ~isnan(pts2(pointIdx, 2));
+        
+        if validCam1 && validCam2
+            totalAttempts = totalAttempts + 1;
+            
+            try
+                % Extract point coordinates
+                point1 = pts1(pointIdx, :);
+                point2 = pts2(pointIdx, :);
+                
+                % Triangulate using stereo parameters
+                worldPoint = triangulate(point1, point2, stereoParams);
+                
+                % Validate result (reasonable distance and finite values)
+                if all(isfinite(worldPoint)) && norm(worldPoint) < 5000 % 5m limit
+                    xyzPoints(pointIdx, :, frameIdx) = worldPoint;
+                    successfulTriangulations = successfulTriangulations + 1;
+                end
+                
+            catch
+                % Skip failed triangulations
+                continue;
+            end
+        end
+    end
+end
+
+% Report triangulation results
+successRate = (successfulTriangulations / totalAttempts) * 100;
+framesWithData = sum(any(~isnan(xyzPoints(:, 1, :)), 1));
+frameCoverage = (framesWithData / numFrames) * 100;
+
+fprintf('\n=== Triangulation Results ===\n');
+fprintf('Success rate: %.1f%% (%d/%d)\n', successRate, successfulTriangulations, totalAttempts);
+fprintf('Frame coverage: %.1f%% (%d/%d frames)\n', frameCoverage, framesWithData, numFrames);
+
+if successRate > 70
+    fprintf('✓ Excellent triangulation success rate!\n');
+elseif successRate > 50
+    fprintf('✓ Good triangulation success rate\n');
+else
+    fprintf('⚠ Lower triangulation rate - but proceeding\n');
+end
+
+fprintf('\n=== Step 5 Complete ===\n');
+
+
+///////////////////////////////////
+
+%% Step 6: MATLAB-Compatible MediaPipe Skeleton Connections
+
+fprintf('=== Step 6: Creating 3D Video with MATLAB-Compatible Indices ===\n');
+
+% Apply Z-axis rotation 
+zRotationAngle = 30;
+zRotMatrix = [cosd(zRotationAngle), -sind(zRotationAngle), 0;
+              sind(zRotationAngle), cosd(zRotationAngle), 0;
+              0, 0, 1];
+
+baseRotation = [1, 0, 0; 0, 0, 1; 0, -1, 0];
+rotationMatrix = zRotMatrix * baseRotation;
+
+rotatedXyzPoints = nan(size(xyzPoints));
+
+for frameIdx = 1:size(xyzPoints, 3)
+    for kpIdx = 1:size(xyzPoints, 1)
+        if ~isnan(xyzPoints(kpIdx, 1, frameIdx))
+            originalPoint = squeeze(xyzPoints(kpIdx, :, frameIdx));
+            rotatedPoint = rotationMatrix * originalPoint';
+            rotatedXyzPoints(kpIdx, :, frameIdx) = rotatedPoint';
+        end
+    end
+end
+
+% FIXED: MediaPipe indices converted to MATLAB (add 1 to all indices)
+fprintf('Using MediaPipe keypoints converted to MATLAB indexing...\n');
+
+% MediaPipe keypoints (0-based) -> MATLAB (1-based):
+% nose=0->1, left_shoulder=11->12, right_shoulder=12->13
+% left_elbow=13->14, right_elbow=14->15, left_wrist=15->16, right_wrist=16->17
+% left_hip=23->24, right_hip=24->25, left_knee=25->26, right_knee=26->27
+% left_ankle=27->28, right_ankle=28->29
+
+connections = [
+    % TORSO
+    13, 12;     % right_shoulder(12+1) to left_shoulder(11+1)
+    13, 25;     % right_shoulder(12+1) to right_hip(24+1)
+    12, 24;     % left_shoulder(11+1) to left_hip(23+1)
+    25, 24;     % right_hip(24+1) to left_hip(23+1)
+    
+    % LEFT ARM
+    12, 14;     % left_shoulder(11+1) to left_elbow(13+1)
+    14, 16;     % left_elbow(13+1) to left_wrist(15+1)
+    
+    % RIGHT ARM
+    13, 15;     % right_shoulder(12+1) to right_elbow(14+1)
+    15, 17;     % right_elbow(14+1) to right_wrist(16+1)
+    
+    % LEFT LEG
+    24, 26;     % left_hip(23+1) to left_knee(25+1)
+    26, 28;     % left_knee(25+1) to left_ankle(27+1)
+    
+    % RIGHT LEG
+    25, 27;     % right_hip(24+1) to right_knee(26+1)
+    27, 29;     % right_knee(26+1) to right_ankle(28+1)
+    
+    % HEAD (optional)
+    1, 12;      % nose(0+1) to left_shoulder(11+1)
+    1, 13       % nose(0+1) to right_shoulder(12+1)
+];
+
+fprintf('MATLAB-compatible connections created (all indices +1)\n');
+
+% Create video with corrected indices
+videoFileName = 'Stereo_3D_Human_Motion_FIXED_INDICES.mp4';
+writerObj = VideoWriter(videoFileName, 'MPEG-4');
+writerObj.FrameRate = 25;
+writerObj.Quality = 95;
+open(writerObj);
+
+fig = figure('Position', [100, 100, 1200, 800], 'Color', 'white');
+
+% Calculate bounds
+xRange = [min(rotatedXyzPoints(:, 1, :), [], 'all', 'omitnan'), ...
+          max(rotatedXyzPoints(:, 1, :), [], 'all', 'omitnan')];
+yRange = [min(rotatedXyzPoints(:, 2, :), [], 'all', 'omitnan'), ...
+          max(rotatedXyzPoints(:, 2, :), [], 'all', 'omitnan')];
+zRange = [min(rotatedXyzPoints(:, 3, :), [], 'all', 'omitnan'), ...
+          max(rotatedXyzPoints(:, 3, :), [], 'all', 'omitnan')];
+
+padding = 0.1;
+xRange = xRange + [-1, 1] * (xRange(2) - xRange(1)) * padding;
+yRange = yRange + [-1, 1] * (yRange(2) - yRange(1)) * padding;
+zRange = zRange + [-1, 1] * (zRange(2) - zRange(1)) * padding;
+
+frameCount = 0;
+for frameIdx = 1:size(rotatedXyzPoints, 3)
+    validPoints = ~isnan(rotatedXyzPoints(:, 1, frameIdx));
+    
+    if sum(validPoints) >= 5
+        frameCount = frameCount + 1;
+        clf;
+        
+        % Plot 3D keypoints with labels for debugging
+        scatter3(rotatedXyzPoints(validPoints, 1, frameIdx), ...
+                 rotatedXyzPoints(validPoints, 2, frameIdx), ...
+                 rotatedXyzPoints(validPoints, 3, frameIdx), ...
+                 100, 'filled', 'MarkerFaceColor', 'red', ...
+                 'MarkerEdgeColor', 'black');
+        
+        hold on;
+        
+        % Draw skeleton with corrected indices
+        for i = 1:size(connections, 1)
+            pt1 = connections(i, 1);
+            pt2 = connections(i, 2);
+            
+            % Check if indices are within valid range
+            if pt1 <= size(rotatedXyzPoints, 1) && pt2 <= size(rotatedXyzPoints, 1)
+                if ~isnan(rotatedXyzPoints(pt1, 1, frameIdx)) && ...
+                   ~isnan(rotatedXyzPoints(pt2, 1, frameIdx))
+                    
+                    % Color-code different body parts
+                    if i <= 4  % Torso
+                        lineColor = 'red'; lineWidth = 4;
+                    elseif i <= 8  % Arms
+                        lineColor = 'green'; lineWidth = 3;
+                    elseif i <= 12  % Legs
+                        lineColor = 'blue'; lineWidth = 3;
+                    else  % Head
+                        lineColor = 'yellow'; lineWidth = 2;
+                    end
+                    
+                    plot3([rotatedXyzPoints(pt1, 1, frameIdx), rotatedXyzPoints(pt2, 1, frameIdx)], ...
+                          [rotatedXyzPoints(pt1, 2, frameIdx), rotatedXyzPoints(pt2, 2, frameIdx)], ...
+                          [rotatedXyzPoints(pt1, 3, frameIdx), rotatedXyzPoints(pt2, 3, frameIdx)], ...
+                          'Color', lineColor, 'LineWidth', lineWidth);
+                end
+            end
+        end
+        
+        xlim(xRange); ylim(yRange); zlim(zRange);
+        xlabel('X (mm)'); ylabel('Y (mm)'); zlabel('Z (mm)');
+        title(sprintf('FIXED INDICES Stereo 3D - Frame %d', frameIdx));
+        grid on; view(45, 15);
+        
+        drawnow;
+        frame = getframe(gcf);
+        writeVideo(writerObj, frame);
+        
+        if mod(frameCount, 50) == 0
+            fprintf('Processed %d frames\n', frameCount);
+        end
+    end
+end
+
+close(writerObj);
+close(fig);
+
+fprintf('✓ FIXED INDICES video created: %s\n', videoFileName);
+fprintf('✓ All MediaPipe indices converted to MATLAB format!\n');
