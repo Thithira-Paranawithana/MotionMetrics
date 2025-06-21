@@ -108,7 +108,9 @@ class AnalysisWorker(QThread):
                 'left_hip', 'right_hip',
                 'left_wrist', 'right_wrist',
                 'left_knee', 'right_knee',
-                'left_ankle', 'right_ankle'
+                'left_ankle', 'right_ankle',
+                'left_shoulder', 'right_shoulder',
+                'left_elbow', 'right_elbow'
             ]
 
             total_velocity_tasks = len(key_keypoints)

@@ -192,31 +192,22 @@ class BiomechanicalReportGenerator:
             self.story.append(table)
 
     def add_velocity_analysis(self, velocity_stats: Dict, velocity_chart_paths: List[str]):
-        """FIXED: Enhanced velocity analysis section with proper error handling."""
+        """Enhanced velocity analysis section with unified table for all joints."""
         heading = Paragraph("Velocity & Acceleration Analysis", self.heading_style)
         self.story.append(heading)
 
         # Enhanced description
         description = """
         Velocity and acceleration analysis provides crucial insights into joint dynamics and movement efficiency.
-        Research shows that knee angular velocities typically range from 9-14 rad/s during dynamic movements,
-        while ankle velocities can reach up to 14.7 rad/s. These metrics are essential for:
-        • Performance analysis and movement optimization
-        • Injury prevention and rehabilitation monitoring  
-        • Bilateral symmetry assessment
-        • Movement efficiency evaluation
+        This analysis covers all major body joints including hips, knees, ankles, shoulders, elbows, and wrists.
+        These metrics are essential for performance analysis, injury prevention, bilateral symmetry assessment,
+        and movement efficiency evaluation.
         """
         para = Paragraph(description, self.styles['Normal'])
         self.story.append(para)
         self.story.append(Spacer(1, 0.2 * inch))
 
-        # Group keypoints by body region
-        hip_keypoints = {k: v for k, v in velocity_stats.items() if 'hip' in k}
-        wrist_keypoints = {k: v for k, v in velocity_stats.items() if 'wrist' in k}
-        knee_keypoints = {k: v for k, v in velocity_stats.items() if 'knee' in k}
-        ankle_keypoints = {k: v for k, v in velocity_stats.items() if 'ankle' in k}
-
-        # Add charts grouped by body region
+        # Add charts
         for chart_path in velocity_chart_paths:
             if os.path.exists(chart_path):
                 try:
@@ -226,138 +217,92 @@ class BiomechanicalReportGenerator:
                 except Exception as e:
                     print(f"Warning: Could not add velocity chart {chart_path}: {e}")
 
-        # FIXED: Enhanced statistics tables with proper error handling
-        if knee_keypoints or ankle_keypoints:
-            knee_ankle_heading = Paragraph("Knee & Ankle Velocity Statistics", self.styles['Heading3'])
-            self.story.append(knee_ankle_heading)
+        # UNIFIED: Single table for all joint velocities
+        if velocity_stats:
+            unified_heading = Paragraph("Complete Joint Velocity Statistics", self.styles['Heading3'])
+            self.story.append(unified_heading)
 
-            # FIXED: Simplified table without problematic fields
+            # Create unified table with all joints
             stats_data = [
                 ['Joint', 'Side', 'Peak Vel (mm/s)', 'Mean Vel (mm/s)', 'Peak Acc (mm/s²)', 'Vel Std (mm/s)']
             ]
 
-            # Add knee data with safe field access
-            for keypoint_name, stats in knee_keypoints.items():
-                side = 'Left' if 'left' in keypoint_name else 'Right'
-                stats_data.append([
-                    'Knee', side,
-                    f"{stats.get('vel_max', 0):.1f}",
-                    f"{stats.get('vel_mean', 0):.1f}",
-                    f"{stats.get('acc_max', 0):.1f}",
-                    f"{stats.get('vel_std', 0):.1f}"
-                ])
+            # Create ordered list of joint types
+            joint_order = ['hip', 'knee', 'ankle', 'shoulder', 'elbow', 'wrist']
 
-            # Add ankle data with safe field access
-            for keypoint_name, stats in ankle_keypoints.items():
-                side = 'Left' if 'left' in keypoint_name else 'Right'
-                stats_data.append([
-                    'Ankle', side,
-                    f"{stats.get('vel_max', 0):.1f}",
-                    f"{stats.get('vel_mean', 0):.1f}",
-                    f"{stats.get('acc_max', 0):.1f}",
-                    f"{stats.get('vel_std', 0):.1f}"
-                ])
+            for joint_type in joint_order:
+                # Get left and right data for this joint type
+                left_key = f'left_{joint_type}'
+                right_key = f'right_{joint_type}'
 
-            table = Table(stats_data, colWidths=[0.8 * inch, 0.8 * inch, 1.2 * inch, 1.2 * inch, 1.2 * inch, 1.2 * inch])
-            table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.lightsteelblue),
-                ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
+                if left_key in velocity_stats:
+                    stats = velocity_stats[left_key]
+                    stats_data.append([
+                        joint_type.capitalize(), 'Left',
+                        f"{stats.get('vel_max', 0):.1f}",
+                        f"{stats.get('vel_mean', 0):.1f}",
+                        f"{stats.get('acc_max', 0):.1f}",
+                        f"{stats.get('vel_std', 0):.1f}"
+                    ])
+
+                if right_key in velocity_stats:
+                    stats = velocity_stats[right_key]
+                    stats_data.append([
+                        joint_type.capitalize(), 'Right',
+                        f"{stats.get('vel_max', 0):.1f}",
+                        f"{stats.get('vel_mean', 0):.1f}",
+                        f"{stats.get('acc_max', 0):.1f}",
+                        f"{stats.get('vel_std', 0):.1f}"
+                    ])
+
+            # Create unified table
+            table = Table(stats_data, colWidths=[1 * inch, 0.8 * inch, 1.2 * inch, 1.2 * inch, 1.2 * inch, 1.2 * inch])
+
+            # Enhanced styling with alternating colors for different joints
+            table_style = [
+                ('BACKGROUND', (0, 0), (-1, 0), colors.darkblue),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
                 ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
                 ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
                 ('FONTSIZE', (0, 0), (-1, -1), 9),
-                ('GRID', (0, 0), (-1, -1), 1, colors.black),
-                # Highlight knee rows
-                ('BACKGROUND', (0, 1), (-1, 2), colors.lightcyan),
-                # Highlight ankle rows
-                ('BACKGROUND', (0, 3), (-1, 4), colors.lightyellow)
-            ]))
+                ('GRID', (0, 0), (-1, -1), 1, colors.black)
+            ]
 
+            # Add alternating colors for different joint types
+            row_colors = [colors.lightcyan, colors.lightyellow, colors.lightgreen,
+                          colors.lightcoral, colors.lightsteelblue, colors.lightseagreen]
+
+            current_row = 1
+            for i, joint_type in enumerate(joint_order):
+                left_key = f'left_{joint_type}'
+                right_key = f'right_{joint_type}'
+
+                joint_rows = 0
+                if left_key in velocity_stats:
+                    joint_rows += 1
+                if right_key in velocity_stats:
+                    joint_rows += 1
+
+                if joint_rows > 0:
+                    color = row_colors[i % len(row_colors)]
+                    table_style.append(('BACKGROUND', (0, current_row), (-1, current_row + joint_rows - 1), color))
+                    current_row += joint_rows
+
+            table.setStyle(TableStyle(table_style))
             self.story.append(table)
             self.story.append(Spacer(1, 0.2 * inch))
 
             # Add clinical interpretation
             interpretation = """
-            Clinical Interpretation:
-            • Peak Velocity: Maximum instantaneous velocity during movement
-            • Mean Velocity: Average velocity throughout the movement cycle
-            • Velocity Std: Standard deviation indicates movement consistency
-            • Bilateral Comparison: Significant differences between left/right may indicate asymmetries
-            • Peak Velocities: Compare with normative data for performance assessment
+            Clinical Interpretation:<br/>
+            • Peak Velocity: Maximum instantaneous velocity during movement<br/>
+            • Mean Velocity: Average velocity throughout the movement cycle<br/> 
+            • Peak Acceleration: Maximum acceleration during movement<br/>
+            • Velocity Std: Standard deviation indicates movement consistency<br/>
             """
 
             interp_para = Paragraph(interpretation, self.styles['Normal'])
             self.story.append(interp_para)
-
-        # Add hip and wrist data in separate sections if needed
-        if hip_keypoints:
-            self._add_hip_velocity_stats(hip_keypoints)
-
-        if wrist_keypoints:
-            self._add_wrist_velocity_stats(wrist_keypoints)
-
-    def _add_hip_velocity_stats(self, hip_keypoints):
-        """Add hip velocity statistics section."""
-        if not hip_keypoints:
-            return
-
-        hip_heading = Paragraph("Hip Velocity Statistics", self.styles['Heading3'])
-        self.story.append(hip_heading)
-
-        stats_data = [['Side', 'Peak Vel (mm/s)', 'Mean Vel (mm/s)', 'Peak Acc (mm/s²)']]
-
-        for keypoint_name, stats in hip_keypoints.items():
-            side = 'Left' if 'left' in keypoint_name else 'Right'
-            stats_data.append([
-                side,
-                f"{stats.get('vel_max', 0):.1f}",
-                f"{stats.get('vel_mean', 0):.1f}",
-                f"{stats.get('acc_max', 0):.1f}"
-            ])
-
-        table = Table(stats_data, colWidths=[1 * inch, 1.2 * inch, 1.2 * inch, 1.2 * inch])
-        table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.lightcoral),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, -1), 9),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black)
-        ]))
-
-        self.story.append(table)
-        self.story.append(Spacer(1, 0.2 * inch))
-
-    def _add_wrist_velocity_stats(self, wrist_keypoints):
-        """Add wrist velocity statistics section."""
-        if not wrist_keypoints:
-            return
-
-        wrist_heading = Paragraph("Wrist Velocity Statistics", self.styles['Heading3'])
-        self.story.append(wrist_heading)
-
-        stats_data = [['Side', 'Peak Vel (mm/s)', 'Mean Vel (mm/s)', 'Peak Acc (mm/s²)']]
-
-        for keypoint_name, stats in wrist_keypoints.items():
-            side = 'Left' if 'left' in keypoint_name else 'Right'
-            stats_data.append([
-                side,
-                f"{stats.get('vel_max', 0):.1f}",
-                f"{stats.get('vel_mean', 0):.1f}",
-                f"{stats.get('acc_max', 0):.1f}"
-            ])
-
-        table = Table(stats_data, colWidths=[1 * inch, 1.2 * inch, 1.2 * inch, 1.2 * inch])
-        table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.lightseagreen),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, -1), 9),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black)
-        ]))
-
-        self.story.append(table)
-        self.story.append(Spacer(1, 0.2 * inch))
 
     def add_conclusions(self):
         """Add conclusions section."""
@@ -365,20 +310,23 @@ class BiomechanicalReportGenerator:
         self.story.append(heading)
 
         conclusions = """
-        This biomechanical analysis provides comprehensive insights into human movement patterns
-        captured through 3D motion tracking.<br/>
-        The analysis includes:<br/>
+        <para align="justify">
+        This <b>biomechanical analysis</b> provides comprehensive insights into <i>human movement patterns</i>
+        captured through <b>3D motion tracking</b>.
+        <br/><br/>
 
-        • Bilateral movement comparison for symmetry assessment<br/>
-        • Joint angle calculations for mobility evaluation<br/>
-        • Velocity and acceleration analysis for dynamic assessment<br/>
-        • Statistical summaries for quantitative evaluation<br/><br/>
+        <b>The analysis includes:</b><br/>
+        • <i>Bilateral movement comparison</i> for symmetry assessment<br/>
+        • <i>Joint angle calculations</i> for mobility evaluation<br/>
+        • <i>Velocity and acceleration analysis</i> for dynamic assessment<br/>
+        • <i>Statistical summaries</i> for quantitative evaluation<br/><br/>
 
-        The results can be used for:<br/>
-        • Sports performance analysis<br/>
-        • Rehabilitation monitoring<br/>
-        • Biomechanical research<br/>
-        • Movement pattern assessment<br/>
+        <b>The results can be applied in:</b><br/>
+        • <i>Sports performance analysis</i><br/>
+        • <i>Rehabilitation monitoring</i><br/>
+        • <i>Biomechanical research</i><br/>
+        • <i>Movement pattern assessment</i>
+        </para>
         """
 
         para = Paragraph(conclusions, self.styles['Normal'])
@@ -389,7 +337,7 @@ class BiomechanicalReportGenerator:
                         joint_chart_path: str = None, velocity_stats: Dict = None,
                         velocity_chart_paths: List[str] = None, csv_file_path: str = ""):
         """Generate the complete report with velocity analysis."""
-        # Add all existing sections
+
         self.add_title_page(csv_file_path)
         self.add_summary_section(data_stats)
 

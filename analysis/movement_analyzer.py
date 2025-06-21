@@ -58,21 +58,21 @@ class MovementAnalyzer:
 
         plt.tight_layout()
 
-        # Save figure
+        # Save figure with output folder support
         if save_path is None:
-            save_path = f'{pair_name}_Movement_Analysis.png'
+            import os
+            os.makedirs('output_movements', exist_ok=True)
+            save_path = os.path.join('output_movements', f'{pair_name}_Movement_Analysis.png')
 
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        plt.savefig(save_path.replace('.png', '.pdf'), bbox_inches='tight')
+        # plt.savefig(save_path.replace('.png', '.pdf'), bbox_inches='tight')
+        # plt.close()  # Close figure to free memory
 
         return save_path
 
     def create_velocity_charts(self, keypoint_name: str, save_path: str = None) -> str:
         """Create velocity analysis charts for a keypoint."""
-        # FIXED: Change relative import to absolute import
         from analysis.joint_angles import JointAngleCalculator
-
-        # Rest of the method remains the same...
 
         keypoint_data = self.data_loader.get_keypoint_data(keypoint_name)
         if keypoint_data is None:
@@ -124,11 +124,15 @@ class MovementAnalyzer:
 
         plt.tight_layout()
 
-        # Save figure
+        # UPDATED: Save figure with output folder support
         if save_path is None:
-            save_path = f'{keypoint_name}_Velocity_Analysis.png'
+            import os
+            os.makedirs('output_velocities', exist_ok=True)
+            save_path = os.path.join('output_velocities', f'{keypoint_name}_Velocity_Analysis.png')
 
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        # plt.close()  # Close figure to free memory
+
         return save_path
 
     def create_joint_angle_charts(self, joint_angles_data: Dict[str, pd.DataFrame], save_path: str = None) -> str:
@@ -179,11 +183,18 @@ class MovementAnalyzer:
 
         plt.tight_layout()
 
-        # Save figure
         if save_path is None:
-            save_path = 'Joint_Angle_Analysis.png'
+            import os
+            os.makedirs('output_joint_angles', exist_ok=True)
+            save_path = os.path.join('output_joint_angles', 'Joint_Angle_Analysis.png')
 
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
+
+        # # Save figure
+        # if save_path is None:
+        #     save_path = 'Joint_Angle_Analysis.png'
+        #
+        # plt.savefig(save_path, dpi=300, bbox_inches='tight')
         return save_path
 
     def calculate_movement_statistics(self, pair_name: str) -> Dict:
