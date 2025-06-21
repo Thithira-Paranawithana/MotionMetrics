@@ -294,7 +294,7 @@ class BiomechanicalReportGenerator:
 
             # Add clinical interpretation
             interpretation = """
-            Clinical Interpretation:<br/>
+            <b>Clinical Interpretation:</b><br/>
             • Peak Velocity: Maximum instantaneous velocity during movement<br/>
             • Mean Velocity: Average velocity throughout the movement cycle<br/> 
             • Peak Acceleration: Maximum acceleration during movement<br/>
@@ -316,16 +316,16 @@ class BiomechanicalReportGenerator:
         <br/><br/>
 
         <b>The analysis includes:</b><br/>
-        • <i>Bilateral movement comparison</i> for symmetry assessment<br/>
-        • <i>Joint angle calculations</i> for mobility evaluation<br/>
-        • <i>Velocity and acceleration analysis</i> for dynamic assessment<br/>
-        • <i>Statistical summaries</i> for quantitative evaluation<br/><br/>
+        • Bilateral movement comparison for symmetry assessment<br/>
+        • Joint angle calculations for mobility evaluation<br/>
+        • Velocity and acceleration analysis for dynamic assessment<br/>
+        • Statistical summaries for quantitative evaluation<br/><br/>
 
         <b>The results can be applied in:</b><br/>
-        • <i>Sports performance analysis</i><br/>
-        • <i>Rehabilitation monitoring</i><br/>
-        • <i>Biomechanical research</i><br/>
-        • <i>Movement pattern assessment</i>
+        • Sports performance analysis<br/>
+        • Rehabilitation monitoring<br/>
+        • Biomechanical research<br/>
+        • Movement pattern assessment
         </para>
         """
 

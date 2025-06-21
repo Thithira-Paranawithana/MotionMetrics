@@ -230,6 +230,60 @@ class BiomechanicalAnalyzerGUI(QMainWindow):
 
         main_layout.addWidget(file_group)
 
+        # Joint Visualization Section
+        viz_group = QGroupBox("Joint Angle Visualization")
+        viz_layout = QVBoxLayout(viz_group)
+
+        viz_label = QLabel("Create Interactive Joint Angle Visualization:")
+        viz_label.setObjectName("subtitle")
+        viz_layout.addWidget(viz_label)
+
+        # Joint selection for visualization
+        viz_row = QHBoxLayout()
+        viz_row.addWidget(QLabel("Select Joint:"))
+
+        self.viz_joint_combo = QComboBox()
+        self.viz_joint_combo.addItems(list(JOINT_ANGLES.keys()))
+        viz_row.addWidget(self.viz_joint_combo)
+
+        self.viz_button = QPushButton("Create Visualization")
+        self.viz_button.clicked.connect(self.create_joint_visualization)
+        self.viz_button.setEnabled(False)
+        viz_row.addWidget(self.viz_button)
+
+        viz_row.addStretch()
+        viz_layout.addLayout(viz_row)
+
+        main_layout.addWidget(viz_group)
+
+        # Full Body Skeleton Visualization Section
+        skeleton_group = QGroupBox("Full Body Skeleton Visualization")
+        skeleton_layout = QVBoxLayout(skeleton_group)
+
+        skeleton_label = QLabel("Create Full Body Skeleton Visualization:")
+        skeleton_label.setObjectName("subtitle")
+        skeleton_layout.addWidget(skeleton_label)
+
+        # Skeleton visualization controls
+        skeleton_row = QHBoxLayout()
+
+        skeleton_row.addWidget(QLabel("FPS:"))
+        self.skeleton_fps_spinbox = QSpinBox()
+        self.skeleton_fps_spinbox.setRange(10, 60)
+        self.skeleton_fps_spinbox.setValue(25)
+        skeleton_row.addWidget(self.skeleton_fps_spinbox)
+
+        self.skeleton_button = QPushButton("Create Full Body Skeleton")
+        self.skeleton_button.clicked.connect(self.create_skeleton_visualization)
+        self.skeleton_button.setEnabled(False)
+        skeleton_row.addWidget(self.skeleton_button)
+
+        skeleton_row.addStretch()
+        skeleton_layout.addLayout(skeleton_row)
+
+        main_layout.addWidget(skeleton_group)
+
+
         # Analysis configuration
         config_group = QGroupBox("Analysis Configuration")
         config_layout = QVBoxLayout(config_group)
@@ -265,32 +319,6 @@ class BiomechanicalAnalyzerGUI(QMainWindow):
         self.joints_layout = QGridLayout()
         self.joint_checkboxes = {}
 
-        # Joint Visualization Section
-        viz_group = QGroupBox("Joint Angle Visualization")
-        viz_layout = QVBoxLayout(viz_group)
-
-        viz_label = QLabel("Create Interactive Joint Angle Visualization:")
-        viz_label.setObjectName("subtitle")
-        viz_layout.addWidget(viz_label)
-
-        # Joint selection for visualization
-        viz_row = QHBoxLayout()
-        viz_row.addWidget(QLabel("Select Joint:"))
-
-        self.viz_joint_combo = QComboBox()
-        self.viz_joint_combo.addItems(list(JOINT_ANGLES.keys()))
-        viz_row.addWidget(self.viz_joint_combo)
-
-        self.viz_button = QPushButton("Create Visualization")
-        self.viz_button.clicked.connect(self.create_joint_visualization)
-        self.viz_button.setEnabled(False)
-        viz_row.addWidget(self.viz_button)
-
-        viz_row.addStretch()
-        viz_layout.addLayout(viz_row)
-
-        main_layout.addWidget(viz_group)
-
         row, col = 0, 0
         for joint_name in JOINT_ANGLES.keys():
             from PyQt5.QtWidgets import QCheckBox
@@ -305,7 +333,6 @@ class BiomechanicalAnalyzerGUI(QMainWindow):
                 row += 1
 
         config_layout.addLayout(self.joints_layout)
-
         main_layout.addWidget(config_group)
 
         # Control buttons
@@ -359,6 +386,8 @@ class BiomechanicalAnalyzerGUI(QMainWindow):
 
                 self.file_label.setText(os.path.basename(file_path))
                 self.analyze_button.setEnabled(True)
+                # self.viz_button.setEnabled(True)
+                # self.skeleton_button.setEnabled(True)
 
                 # Update results
                 available_keypoints = self.data_loader.get_available_keypoints()
@@ -554,6 +583,52 @@ class BiomechanicalAnalyzerGUI(QMainWindow):
             QMessageBox.critical(self, "Error", f"Failed to create visualization:\n{str(e)}")
             self.results_text.append(f"✗ Error: {str(e)}")
 
+    def create_skeleton_visualization(self):
+        """Create full body skeleton visualization."""
+        if not self.data_loader:
+            QMessageBox.warning(self, "Warning", "Please select a CSV file first.")
+            return
+
+        try:
+            from analysis.skeleton_visualizer import SkeletonVisualizer
+
+            # Reset progress bar
+            self.progress_bar.setValue(0)
+            self.status_label.setText("Creating skeleton visualization...")
+
+            # Progress callback function
+            def update_progress(value, message):
+                self.progress_bar.setValue(value)
+                self.status_label.setText(message)
+                from PyQt5.QtWidgets import QApplication
+                QApplication.processEvents()
+
+            # Create skeleton visualizer
+            skeleton_viz = SkeletonVisualizer(self.data_loader)
+
+            results = skeleton_viz.create_full_body_skeleton(
+                fps=self.skeleton_fps_spinbox.value(),
+                progress_callback=update_progress
+            )
+
+            # Update results display
+            self.results_text.append(f"✅ Full body skeleton visualization created!")
+            self.results_text.append(f"  📱 HTML: {results.get('html_file', 'N/A')}")
+            self.results_text.append(f"  🎯 3D Window: Interactive matplotlib window opened")
+
+            # Show success message
+            QMessageBox.information(self, "Success",
+                                    f"Full body skeleton visualization created!\n\n"
+                                    f"Files created:\n"
+                                    f"• HTML: Interactive web animation\n"
+                                    f"• 3D Window: Interactive matplotlib window\n\n"
+                                    f"Use mouse to rotate, zoom, and pan in 3D window!")
+
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to create skeleton:\n{str(e)}")
+            self.results_text.append(f"✗ Error: {str(e)}")
+
+
     # Update the select_file method to enable visualization button
     def select_file(self):
         """Select CSV file for analysis."""
@@ -569,6 +644,7 @@ class BiomechanicalAnalyzerGUI(QMainWindow):
                 self.file_label.setText(os.path.basename(file_path))
                 self.analyze_button.setEnabled(True)
                 self.viz_button.setEnabled(True)  # Enable visualization button
+                self.skeleton_button.setEnabled(True)
 
                 # Update results
                 available_keypoints = self.data_loader.get_available_keypoints()
