@@ -8,8 +8,8 @@
 [![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org/)
 [![OpenCV](https://img.shields.io/badge/OpenCV-27338e?style=for-the-badge&logo=OpenCV&logoColor=white)](https://opencv.org/)
 [![MATLAB](https://img.shields.io/badge/MATLAB-0076A8?style=for-the-badge&logo=mathworks&logoColor=white)](https://mathworks.com/)
-[![MediaPipe](https://img.shields.io/badge/MediaPipe-4285F4.svg?style=for-the-badge&logo=google&logoColor=white)](https://mediapipe.dev) 
-[![SpinView](https://img.shields.io/badge/SpinView-FF6B35.svg?style=for-the-badge)](https://www.flir.com/support/products/spinview/)
+[![MediaPipe](https://img.shields.io/badge/MediaPipe-4285F4.svg?style=for-the-badge&logo=google&logoColor=white)]([https://mediapipe.dev](https://ai.google.dev/edge/mediapipe/solutions/guide)) 
+[![SpinView](https://img.shields.io/badge/SpinView-FF6B35.svg?style=for-the-badge)]([https://www.flir.com/support/products/spinview/](https://www.teledynevisionsolutions.com/products/spinnaker-sdk/?model=Spinnaker%20SDK&vertical=machine%20vision&segment=iis))
 
 *Democratizing precision motion capture for sports biomechanics analysis*
 
