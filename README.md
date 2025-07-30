@@ -81,10 +81,11 @@
 
 <div align="center">
 
+| **Team Members** |
 |:---------------:|
-| **Dilranga Dissanayake** | 
-| **Thithira Paranawithana** | 
-| **Nipini Tennakoon** |
+| Dilranga Dissanayake | 
+| Thithira Paranawithana | 
+| Nipini Tennakoon |
 
 </div>
 
