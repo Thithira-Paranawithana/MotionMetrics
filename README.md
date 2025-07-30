@@ -8,7 +8,8 @@
 [![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org/)
 [![OpenCV](https://img.shields.io/badge/OpenCV-27338e?style=for-the-badge&logo=OpenCV&logoColor=white)](https://opencv.org/)
 [![MATLAB](https://img.shields.io/badge/MATLAB-0076A8?style=for-the-badge&logo=mathworks&logoColor=white)](https://mathworks.com/)
-[![MIT License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](https://choosealicense.com/licenses/mit/)
+[![MediaPipe](https://img.shields.io/badge/MediaPipe-4285F4.svg?style=for-the-badge&logo=google&logoColor=white)](https://mediapipe.dev) 
+[![SpinView](https://img.shields.io/badge/SpinView-FF6B35.svg?style=for-the-badge)](https://www.flir.com/support/products/spinview/)
 
 *Democratizing precision motion capture for sports biomechanics analysis*
 
@@ -79,7 +80,6 @@
 
 <div align="center">
 
-| **Team Members** |
 |:---------------:|
 | **Dilranga Dissanayake** | 
 | **Thithira Paranawithana** | 
